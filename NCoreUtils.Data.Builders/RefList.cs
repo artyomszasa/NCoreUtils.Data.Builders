@@ -42,6 +42,10 @@ namespace NCoreUtils.Data.Builders
         public static RefList<TData> Create<TSource, TData>(IReadOnlyCollection<TSource> source, Func<TSource, TData> selector)
             where TData : struct
         {
+            if (source is null)
+            {
+                throw new ArgumentNullException(nameof(source));
+            }
             var data = new TData[NextCapacity(source.Count)];
             var count = 0;
             using var enumerator = source.GetEnumerator();
@@ -51,6 +55,36 @@ namespace NCoreUtils.Data.Builders
                 ++count;
             }
             return new RefList<TData>(data, count);
+        }
+
+        public static RefList<TData> Create<TSource, TData>(IEnumerable<TSource> source, Func<TSource, TData> selector)
+            where TData : struct
+        {
+            if (source is null)
+            {
+                throw new ArgumentNullException(nameof(source));
+            }
+            var data = source is IReadOnlyCollection<TSource> collection ? new List<TData>(collection.Count) : new List<TData>();
+            foreach (var item in source)
+            {
+                data.Add(selector(item));
+            }
+            return new RefList<TData>(data.ToArray(), data.Count);
+        }
+
+        public static RefList<TData> CreateOrEmpty<TSource, TData>(IEnumerable<TSource>? source, Func<TSource, TData> selector)
+            where TData : struct
+        {
+            if (source is null)
+            {
+                return Empty<TData>();
+            }
+            var data = source is IReadOnlyCollection<TSource> collection ? new List<TData>(collection.Count) : new List<TData>();
+            foreach (var item in source)
+            {
+                data.Add(selector(item));
+            }
+            return new RefList<TData>(data.ToArray(), data.Count);
         }
 
         public static RefList<TData> Empty<TData>()
