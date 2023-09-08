@@ -1,9 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net6.0;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>net7.0;net6.0;netstandard2.1</TargetFrameworks>
     <Nullable>enable</Nullable>
-    <LangVersion>10.0</LangVersion>
-    <Version>6.0.0-rc02</Version>
+    <LangVersion>11.0</LangVersion>
     <IsTrimmable>True</IsTrimmable>
   </PropertyGroup>
 </Project>
