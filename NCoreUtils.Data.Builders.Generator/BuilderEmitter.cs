@@ -374,19 +374,26 @@ internal class BuilderEmitter
         var candidates = target.Type.GetMembers()
             .OfType<IMethodSymbol>()
             .Where(m => m.MethodKind == MethodKind.Constructor && !m.IsStatic)
-            .Where(m => m.Parameters.All(p => properties.Any(prop => Eqi(prop.PropertyName, p.Name) && Eqs(prop.SourceType, p.Type))));
+            .ToList();
+            // .Where(m => m.Parameters.All(p => properties.Any(prop => Eqi(prop.PropertyName, p.Name) && Eqs(prop.SourceType, p.Type))));
+        var details = new List<string>(candidates.Count);
         IMethodSymbol? ctor = null;
         foreach (var candidate in candidates)
         {
+            if (candidate.Parameters.TryGetFirst(p => !properties.Any(prop => Eqi(prop.PropertyName, p.Name) && Eqs(prop.SourceType, p.Type)), out var parameter))
+            {
+                details.Add($"{target.Type.Name}({string.Join(", ", candidate.Parameters)}) => no mathcing property for {parameter}");
+                continue;
+            }
             if (ctor is not null)
             {
-                throw new InvalidOperationException("Multiple constructor matches.");
+                throw new InvalidOperationException("Multiple constructor matches for {target.Type.Name}.");
             }
             ctor = candidate;
         }
         if (ctor is null)
         {
-            throw new InvalidOperationException("No constructor match.");
+            throw new InvalidOperationException($"No constructor match, candidates are: {string.Join("; ", details)}");
         }
         var argList = SeparatedList(ctor.Parameters.Select(p =>
         {
