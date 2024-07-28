@@ -48,12 +48,27 @@ namespace NCoreUtils.Data
     }
 
     [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
+    internal sealed class BuilderIgnoreAttribute : System.Attribute
+    {
+        public BuilderIgnoreAttribute() { /* noop */ }
+    }
+
+    [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
     internal sealed class BuilderFieldTypeAttribute : System.Attribute
     {
         public System.Type FieldType { get; }
 
         public BuilderFieldTypeAttribute(System.Type fieldType)
             => FieldType = fieldType;
+    }
+
+    [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
+    internal sealed class BuilderPropertyNameAttribute : System.Attribute
+    {
+        public string PropertyName { get; }
+
+        public BuilderPropertyNameAttribute(string propertyName)
+            => PropertyName = propertyName;
     }
 }";
 
@@ -68,7 +83,7 @@ namespace NCoreUtils.Data
             (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
             (ctx, cancellationToken) =>
             {
-                if (!ctx.SemanticModel.Compilation.HasLanguageVersionAtLeastEqualTo(LanguageVersion.CSharp10))
+                if (!ctx.SemanticModel.Compilation.HasLanguageVersionAtLeastEqualTo(LanguageVersion.CSharp10, out _))
                 {
                     return default;
                 }

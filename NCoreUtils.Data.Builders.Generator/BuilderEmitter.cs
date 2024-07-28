@@ -27,14 +27,23 @@ internal class PropertyData
 
     public string FullyQualifiedFieldTypeName { get; }
 
-    public string FullyQualifiedPropertyTypeName { get; }
+    public string? FullyQualifiedPropertyTypeName { get; }
 
     [MemberNotNullWhen(true, nameof(ElementTypeFullName))]
     [MemberNotNullWhen(true, nameof(SourceElementType))]
+    [MemberNotNullWhen(true, nameof(FullyQualifiedPropertyTypeName))]
     public bool IsRefList { get; }
 
+    /// <summary>
+    /// When <see langword="true" /> the property is mapped to another builder.
+    /// </summary>
+    [MemberNotNullWhen(false, nameof(FullyQualifiedPropertyTypeName))]
+    public bool IsNestedBuilder { get; }
+
+    [MemberNotNullWhen(true, nameof(FullyQualifiedPropertyTypeName))]
     public bool IsInt32List { get; }
 
+    [MemberNotNullWhen(true, nameof(FullyQualifiedPropertyTypeName))]
     public bool IsStringList { get; }
 
     public string? ElementTypeFullName { get; }
@@ -43,11 +52,21 @@ internal class PropertyData
 
     public IPropertySymbol PropertySymbol { get; }
 
+    public string SourcePropertyName => PropertySymbol.Name;
+
     public PropertyData(SemanticModel semanticModel, IReadOnlyList<string> builderFullNames, IPropertySymbol property)
     {
         PropertySymbol = property ?? throw new ArgumentNullException(nameof(property));
-        FieldName = $"_{property.Name.Uncapitalize()}";
-        PropertyName = property.Name;
+        if (property.GetAttributes().TryGetFirst(a => a.AttributeClass?.Name == "BuilderPropertyNameAttribute", out var nameAttr))
+        {
+            PropertyName = (string)nameAttr.ConstructorArguments[0].Value!;
+            FieldName = $"_{PropertyName.Uncapitalize()}";
+        }
+        else
+        {
+            FieldName = $"_{property.Name.Uncapitalize()}";
+            PropertyName = property.Name;
+        }
         FieldIdentifier = IdentifierName(FieldName);
         PropertyIdentifier = IdentifierName(PropertyName);
         SourceType = property.Type;
@@ -59,6 +78,11 @@ internal class PropertyData
             ElementTypeFullName = default;
             FullyQualifiedFieldTypeName = Type.WithNullableAnnotation(NullableAnnotation.Annotated).ToDisplayString(FullyQualifiedMaybeNullableFormat);
             FullyQualifiedPropertyTypeName = Type.ToDisplayString(FullyQualifiedMaybeNullableFormat);
+        }
+        else if (ShouldBeMappedToNestedBuilder(semanticModel, SourceType, builderFullNames, out var nestedBuilderFullName))
+        {
+            IsNestedBuilder = true;
+            FullyQualifiedFieldTypeName = nestedBuilderFullName;
         }
         else if (SourceType is INamedTypeSymbol named && named.ConstructedFrom is not null && named.ConstructedFrom.Name == "IReadOnlyList")
         {
@@ -125,6 +149,28 @@ internal class PropertyData
             ElementTypeFullName = default;
             FullyQualifiedFieldTypeName = Type.WithNullableAnnotation(NullableAnnotation.Annotated).ToDisplayString(FullyQualifiedMaybeNullableFormat);
             FullyQualifiedPropertyTypeName = Type.ToDisplayString(FullyQualifiedMaybeNullableFormat);
+        }
+
+        static bool ShouldBeMappedToNestedBuilder(SemanticModel semanticModel, ITypeSymbol sourceType, IReadOnlyList<string> builderFullNames, [MaybeNullWhen(false)] out string nestedBuilderFullName)
+        {
+            if (sourceType is INamedTypeSymbol named)
+            {
+                var elementNamespace = named.ContainingNamespace.ToDisplayString(new(typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces));
+                var candidateBuilderFullName = elementNamespace + ".Builders." + named.Name + "Builder";
+                if (builderFullNames.Contains(candidateBuilderFullName))
+                {
+                    nestedBuilderFullName = candidateBuilderFullName;
+                    return true;
+                }
+                var externalBuilderType = semanticModel.Compilation.GetTypeByMetadataName(candidateBuilderFullName);
+                if (externalBuilderType is not null)
+                {
+                    nestedBuilderFullName = externalBuilderType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    return true;
+                }
+            }
+            nestedBuilderFullName = default;
+            return false;
         }
     }
 }
@@ -196,8 +242,21 @@ internal class BuilderEmitter
         .AddModifiers(Token(SyntaxKind.PrivateKeyword));
     }
 
+    private static FieldDeclarationSyntax EmitNestedBuilderField(PropertyData data)
+    {
+        return FieldDeclaration(VariableDeclaration(
+            IdentifierName(data.FullyQualifiedFieldTypeName),
+            SeparatedList(new[] { VariableDeclarator(data.PropertyName) })
+        ))
+        .AddModifiers(Token(SyntaxKind.PublicKeyword));
+    }
+
     private PropertyDeclarationSyntax EmitProperty(ITypeSymbol? targetType, PropertyData data)
     {
+        if (data.IsNestedBuilder)
+        {
+            throw new InvalidOperationException("Property cannot be generated for nested builder.");
+        }
         var getterSyntax = AccessorDeclaration(SyntaxKind.GetAccessorDeclaration);
         if (!data.IsRefList && !data.IsStringList && !data.IsInt32List && data.Type is not null && (data.Type.IsValueType || data.Type.NullableAnnotation == NullableAnnotation.Annotated))
         {
@@ -258,14 +317,14 @@ internal class BuilderEmitter
                         ArgumentList(SeparatedList(new []
                         {
                             Argument(IdentifierName("source")),
-                            Argument(default, Token(SyntaxKind.OutKeyword), p.FieldIdentifier)
+                            Argument(default, Token(SyntaxKind.OutKeyword), p.IsNestedBuilder ? p.PropertyIdentifier : p.FieldIdentifier)
                         }))
                     )
                 );
             }
             if (p.IsInt32List)
             {
-                var memberExpression = MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.PropertyName));
+                var memberExpression = MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.SourcePropertyName));
                 return ExpressionStatement(AssignmentExpression(
                     SyntaxKind.SimpleAssignmentExpression,
                     p.FieldIdentifier,
@@ -284,7 +343,7 @@ internal class BuilderEmitter
             }
             if (p.IsStringList)
             {
-                var memberExpression = MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.PropertyName));
+                var memberExpression = MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.SourcePropertyName));
                 return ExpressionStatement(AssignmentExpression(
                     SyntaxKind.SimpleAssignmentExpression,
                     p.FieldIdentifier,
@@ -314,7 +373,7 @@ internal class BuilderEmitter
                         ),
                         ArgumentList(SeparatedList(new []
                         {
-                            Argument(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.PropertyName))),
+                            Argument(MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.SourcePropertyName))),
                             Argument(SimpleLambdaExpression(
                                 TokenList(Token(SyntaxKind.StaticKeyword)),
                                 Parameter(Identifier("e")),
@@ -333,10 +392,29 @@ internal class BuilderEmitter
                     )
                 ));
             }
+            if (p.IsNestedBuilder)
+            {
+                var memberExpression = MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.SourcePropertyName));
+                return ExpressionStatement(AssignmentExpression(
+                    SyntaxKind.SimpleAssignmentExpression,
+                    p.PropertyIdentifier,
+                    ConditionalExpression(
+                        IsPatternExpression(memberExpression, ConstantPattern(LiteralExpression(SyntaxKind.NullLiteralExpression))),
+                        LiteralExpression(SyntaxKind.DefaultLiteralExpression),
+                        ObjectCreationExpression(
+                            ParseTypeName(p.FullyQualifiedFieldTypeName),
+                            ArgumentList(SeparatedList(new [] {
+                                Argument(memberExpression)
+                            })),
+                            null
+                        )
+                    )
+                ));
+            }
             return ExpressionStatement(AssignmentExpression(
                 SyntaxKind.SimpleAssignmentExpression,
                 p.FieldIdentifier,
-                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.PropertyName))
+                MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, IdentifierName("source"), IdentifierName(p.SourcePropertyName))
             ));
         }).ToList();
         if (targetType is not null)
@@ -380,7 +458,7 @@ internal class BuilderEmitter
         IMethodSymbol? ctor = null;
         foreach (var candidate in candidates)
         {
-            if (candidate.Parameters.TryGetFirst(p => !properties.Any(prop => Eqi(prop.PropertyName, p.Name) && Eqs(prop.SourceType, p.Type)), out var parameter))
+            if (candidate.Parameters.TryGetFirst(p => !properties.Any(prop => Eqi(prop.SourcePropertyName, p.Name) && Eqs(prop.SourceType, p.Type)), out var parameter))
             {
                 details.Add($"{target.Type.Name}({string.Join(", ", candidate.Parameters)}) => no mathcing property for {parameter}");
                 continue;
@@ -397,13 +475,21 @@ internal class BuilderEmitter
         }
         var argList = SeparatedList(ctor.Parameters.Select(p =>
         {
-            var data = properties.First(prop => Eqi(prop.PropertyName, p.Name) && Eqs(prop.SourceType, p.Type));
-            var buildMethod = $"Build{data.PropertyName}";
+            var data = properties.First(prop => Eqi(prop.SourcePropertyName, p.Name) && Eqs(prop.SourceType, p.Type));
+            var buildMethod = $"Build{data.SourcePropertyName}";
             var expr = targetType is not null && targetType.GetMembers().Any(m => m is IMethodSymbol && m.Name == buildMethod)
                 ? InvocationExpression(
                     IdentifierName(buildMethod),
-                    ArgumentList(SeparatedList(new [] { Argument(null, Token(SyntaxKind.InKeyword), IdentifierName(data.FieldName)) }))
+                    ArgumentList(SeparatedList(new [] { Argument(null, Token(SyntaxKind.InKeyword), IdentifierName(data.IsNestedBuilder ? data.PropertyName : data.FieldName)) }))
                 )
+                : data.IsNestedBuilder
+                    ? InvocationExpression(
+                        MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            IdentifierName(data.PropertyName),
+                            IdentifierName("Build")
+                        )
+                    )
                 : data.IsInt32List
                     ? ConditionalExpression(
                         IsPatternExpression(IdentifierName(data.FieldName), ConstantPattern(LiteralExpression(SyntaxKind.NullLiteralExpression))),
@@ -520,11 +606,19 @@ internal class BuilderEmitter
         var properties = new List<PropertyData>();
         foreach (var property in target.Type.GetMembers().OfType<IPropertySymbol>())
         {
-            if (property.DeclaredAccessibility == Accessibility.Public)
+            if (property.DeclaredAccessibility == Accessibility.Public && !property.IsStatic
+                && !property.GetAttributes().Any(static attr => attr.AttributeClass?.Name == "BuilderIgnoreAttribute"))
             {
                 var data = new PropertyData(SemanticModel, builderFullNames, property);
-                members.Add(EmitField(data));
-                members.Add(EmitProperty(targetType, data));
+                if (data.IsNestedBuilder)
+                {
+                    members.Add(EmitNestedBuilderField(data));
+                }
+                else
+                {
+                    members.Add(EmitField(data));
+                    members.Add(EmitProperty(targetType, data));
+                }
                 properties.Add(data);
             }
         }

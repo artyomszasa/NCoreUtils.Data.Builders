@@ -5,8 +5,14 @@ namespace NCoreUtils.Data;
 
 internal static class CompilationExtensions
 {
-    public static bool HasLanguageVersionAtLeastEqualTo(this Compilation compilation, LanguageVersion languageVersion)
+    public static bool HasLanguageVersionAtLeastEqualTo(this Compilation compilation, LanguageVersion languageVersion, out LanguageVersion currentVersion)
     {
-        return ((CSharpCompilation)compilation).LanguageVersion >= languageVersion;
+        if (compilation is CSharpCompilation csharpCompilation)
+        {
+            currentVersion = csharpCompilation.LanguageVersion;
+            return currentVersion >= languageVersion;
+        }
+        currentVersion = LanguageVersion.Default;
+        return false;
     }
 }
