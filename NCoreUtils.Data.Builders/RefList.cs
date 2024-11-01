@@ -350,6 +350,33 @@ public class RefList<T> : IEnumerable<T>
         --Count;
     }
 
+    public int RemoveAll(RefListFindDelegate<T> predicate)
+    {
+        var removed = 0;
+        for (var i = 0; i < Count; ++i)
+        {
+            if (predicate(in _data[i]))
+            {
+                ++removed;
+                var k = i;
+                for (var j = i + 1; j < Count; ++j)
+                {
+                    if (predicate(in _data[j]))
+                    {
+                        ++removed;
+                    }
+                    else
+                    {
+                        _data[k++] = _data[j];
+                    }
+                }
+                break;
+            }
+        }
+        Count -= removed;
+        return removed;
+    }
+
     public void Swap(int index1, int index2)
     {
         if (index1 < 0 || index1 >= Count)
