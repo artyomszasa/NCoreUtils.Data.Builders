@@ -350,6 +350,35 @@ public class RefList<T> : IEnumerable<T>
         --Count;
     }
 
+#if NET6_0_OR_GREATER
+    public int RemoveAt(IReadOnlySet<int> indices)
+    {
+        var removed = 0;
+        for (var i = 0; i < Count; ++i)
+        {
+            if (indices.Contains(i))
+            {
+                ++removed;
+                var k = i;
+                for (var j = i + 1; j < Count; ++j)
+                {
+                    if (indices.Contains(j))
+                    {
+                        ++removed;
+                    }
+                    else
+                    {
+                        _data[k++] = _data[j];
+                    }
+                }
+                break;
+            }
+        }
+        Count -= removed;
+        return removed;
+    }
+#endif
+
     public int RemoveAll(RefListFindDelegate<T> predicate)
     {
         var removed = 0;
