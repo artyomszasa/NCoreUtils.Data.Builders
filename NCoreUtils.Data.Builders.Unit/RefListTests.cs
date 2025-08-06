@@ -1,7 +1,13 @@
 namespace NCoreUtils.Data.Builders.Unit;
 
+/// <summary>
+/// RefList related tests
+/// </summary>
 public class RefListTests
 {
+    /// <summary>
+    /// Tests removal
+    /// </summary>
     [Fact]
     public void RemoveAll()
     {
@@ -17,6 +23,9 @@ public class RefListTests
         }
     }
 
+    /// <summary>
+    /// Tests removal
+    /// </summary>
     [Fact]
     public void RemoveAt()
     {

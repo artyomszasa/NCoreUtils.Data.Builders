@@ -11,15 +11,17 @@ namespace NCoreUtils.Data;
 
 internal class PropertyData
 {
-    private static SymbolDisplayFormat FullyQualifiedMaybeNullableFormat { get; } = SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+    private static SymbolDisplayFormat FullyQualifiedMaybeNullableFormat { get; }
+        = SymbolDisplayFormat.FullyQualifiedFormat
+            .AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
     public string FieldName { get; }
 
     public string PropertyName { get; }
 
-    public IdentifierNameSyntax FieldIdentifier { get;}
+    public IdentifierNameSyntax FieldIdentifier { get; }
 
-    public IdentifierNameSyntax PropertyIdentifier { get;}
+    public IdentifierNameSyntax PropertyIdentifier { get; }
 
     public ITypeSymbol SourceType { get; }
 
@@ -52,11 +54,35 @@ internal class PropertyData
 
     public IPropertySymbol PropertySymbol { get; }
 
+    // public string? DocumentationCommentXml { get; }
+
+    public DocumentationCommentTriviaSyntax DocumentationComment { get; }
+
     public string SourcePropertyName => PropertySymbol.Name;
 
-    public PropertyData(SemanticModel semanticModel, IReadOnlyList<string> builderFullNames, IPropertySymbol property)
+    public PropertyData(SourceProductionContext context, SemanticModel semanticModel, IReadOnlyList<string> builderFullNames, IPropertySymbol property)
     {
         PropertySymbol = property ?? throw new ArgumentNullException(nameof(property));
+        DocumentationComment = DocumentationCommentTrivia(
+            SyntaxKind.SingleLineDocumentationCommentTrivia,
+            List(new XmlNodeSyntax[]
+            {
+                XmlText(XmlTextLiteral(TriviaList(DocumentationCommentExterior("///")), " ", " ", TriviaList())),
+                XmlEmptyElement(
+                    XmlName("inheritdoc"),
+                    List(new XmlAttributeSyntax[]
+                    {
+                        XmlCrefAttribute(
+                            QualifiedCref(
+                                ParseTypeName(property.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)),
+                                NameMemberCref(ParseName(property.Name)))
+                        )
+                    })
+                ),
+                XmlText(XmlTextNewLine(TriviaList(), "\r\n", "\r\n", TriviaList()))
+            }),
+            Token(SyntaxKind.EndOfDocumentationCommentToken)
+        ).WithTrailingTrivia(EndOfLine("\r\n"));
         if (property.GetAttributes().TryGetFirst(a => a.AttributeClass?.Name == "BuilderPropertyNameAttribute", out var nameAttr))
         {
             PropertyName = (string)nameAttr.ConstructorArguments[0].Value!;
@@ -177,18 +203,23 @@ internal class PropertyData
 
 internal class BuilderEmitter
 {
+    private static readonly string SelfVersion = typeof(BuilderEmitter).Assembly.GetName()?.Version.ToString() ?? string.Empty;
+
     private static IdentifierNameSyntax ValueIdentifier { get; } = IdentifierName("value");
 
     private static TypeSyntax StringListTypeSyntax { get; } = ParseTypeName("global::System.Collections.Generic.List<string>");
 
     private static TypeSyntax Int32ListTypeSyntax { get; } = ParseTypeName("global::System.Collections.Generic.List<int>");
 
+    private SourceProductionContext Context { get; }
+
     private SemanticModel SemanticModel { get; }
 
     private ITypeSymbol RefListFactoryType { get; }
 
-    public BuilderEmitter(SemanticModel semanticModel)
+    public BuilderEmitter(SemanticModel semanticModel, SourceProductionContext context)
     {
+        Context = context;
         SemanticModel = semanticModel;
         RefListFactoryType = semanticModel.Compilation.GetTypeByMetadataName("NCoreUtils.Data.Builders.RefList")
             ?? throw new InvalidOperationException("Unable to get type symbol for NCoreUtils.Data.Builders.RefList.");
@@ -282,7 +313,20 @@ internal class BuilderEmitter
             type: IdentifierName(data.FullyQualifiedPropertyTypeName),
             identifier: Identifier(data.PropertyName)
         )
-            .AddModifiers(Token(SyntaxKind.PublicKeyword))
+            .AddModifiers(
+                Token(
+                    TriviaList(
+                    // Whitespace("    "),
+                    // Trivia(data.DocumentationComment),
+                    // EndOfLine("\r\n"),
+                    // Whitespace("    ")
+                    ),
+                    SyntaxKind.PublicKeyword,
+                    TriviaList(
+                        Whitespace(" ")
+                    )
+                )
+            )
             .AddAccessorListAccessors(
                 getterSyntax,
                 AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
@@ -294,7 +338,13 @@ internal class BuilderEmitter
                         )
                     ))
                     .WithSemicolonToken(Token(SyntaxKind.SemicolonToken))
-            );
+            )
+            .WithLeadingTrivia(TriviaList(
+                Whitespace("    "),
+                Trivia(data.DocumentationComment),
+                EndOfLine("\r\n"),
+                Whitespace("    ")
+            ));
     }
 
     private static bool Eqi(string? a, string? b)
@@ -609,7 +659,7 @@ internal class BuilderEmitter
             if (property.DeclaredAccessibility == Accessibility.Public && !property.IsStatic
                 && !property.GetAttributes().Any(static attr => attr.AttributeClass?.Name == "BuilderIgnoreAttribute"))
             {
-                var data = new PropertyData(SemanticModel, builderFullNames, property);
+                var data = new PropertyData(Context, SemanticModel, builderFullNames, property);
                 if (data.IsNestedBuilder)
                 {
                     members.Add(EmitNestedBuilderField(data));
@@ -625,9 +675,49 @@ internal class BuilderEmitter
         members.Add(EmitCtor(target, targetType, properties));
         members.Add(EmitBuildMethod(target, targetType, properties));
 
+        var doc = DocumentationCommentTrivia(
+            SyntaxKind.SingleLineDocumentationCommentTrivia,
+            List(new XmlNodeSyntax[]
+            {
+                XmlText(XmlTextLiteral(TriviaList(DocumentationCommentExterior("///")), " ", " ", TriviaList())),
+                XmlEmptyElement(
+                    XmlName("inheritdoc"),
+                    List(targetType is not null
+                        ? new XmlAttributeSyntax[]
+                        {
+                            XmlCrefAttribute(
+                                TypeCref(ParseTypeName(targetType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))
+                            )
+                        }
+                        : Array.Empty<XmlAttributeSyntax>()
+                    )
+                ),
+                XmlText(XmlTextNewLine(TriviaList(), "\r\n", "\r\n", TriviaList()))
+            }),
+            Token(SyntaxKind.EndOfDocumentationCommentToken)
+        ).WithTrailingTrivia(EndOfLine("\r\n"));
+
         return StructDeclaration(builderTypeName)
+            .AddAttributeLists(
+                AttributeList(
+                    Token(
+                        TriviaList(Trivia(doc)),
+                        SyntaxKind.OpenBracketToken,
+                        TriviaList()
+                    ),
+                    default,
+                    SeparatedList(new AttributeSyntax[]
+                    {
+                        Attribute(ParseName("System.CodeDom.Compiler.GeneratedCodeAttribute"), AttributeArgumentList(SeparatedList(new AttributeArgumentSyntax[]
+                        {
+                            AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("NCoreUtils.Data.Builders"))),
+                            AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(SelfVersion)))
+                        })))
+                    }),
+                    Token(SyntaxKind.CloseBracketToken)
+                )
+            )
             .AddModifiers(
-                Token(TriviaList(Comment("/// <inheritdoc/>")), SyntaxKind.PublicKeyword, TriviaList()),
                 Token(SyntaxKind.PartialKeyword)
             )
             .AddMembers(members.ToArray());
@@ -644,8 +734,17 @@ internal class BuilderEmitter
             TypeArgumentList(SeparatedList(new [] { builderTypeSyntax }))
         );
         return ClassDeclaration(extensionTypeName)
+            .AddAttributeLists(
+                AttributeList(SeparatedList(new AttributeSyntax[]
+                {
+                    Attribute(ParseName("System.CodeDom.Compiler.GeneratedCodeAttribute"), AttributeArgumentList(SeparatedList(new AttributeArgumentSyntax[]
+                    {
+                        AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("NCoreUtils.Data.Builders"))),
+                        AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(SelfVersion)))
+                    })))
+                }))
+            )
             .AddModifiers(
-                Token(TriviaList(Comment("/// <inheritdoc/>")), SyntaxKind.PublicKeyword, TriviaList()),
                 Token(SyntaxKind.StaticKeyword)
             )
             .AddMembers(

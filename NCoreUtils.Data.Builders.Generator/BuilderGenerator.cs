@@ -36,24 +36,28 @@ public class BuilderGenerator : IIncrementalGenerator
 namespace NCoreUtils.Data
 {
     [System.AttributeUsage(System.AttributeTargets.Class, AllowMultiple = false)]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute(""NCoreUtils.Data.Builders"", ""8.0.0.0"")]
     internal sealed class HasBuilderAttribute : System.Attribute
     {
         public HasBuilderAttribute() { /* noop */ }
     }
 
     [System.AttributeUsage(System.AttributeTargets.Field, AllowMultiple = false)]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute(""NCoreUtils.Data.Builders"", ""8.0.0.0"")]
     internal sealed class BuilderFieldAttribute : System.Attribute
     {
         public BuilderFieldAttribute() { /* noop */ }
     }
 
     [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute(""NCoreUtils.Data.Builders"", ""8.0.0.0"")]
     internal sealed class BuilderIgnoreAttribute : System.Attribute
     {
         public BuilderIgnoreAttribute() { /* noop */ }
     }
 
     [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute(""NCoreUtils.Data.Builders"", ""8.0.0.0"")]
     internal sealed class BuilderFieldTypeAttribute : System.Attribute
     {
         public System.Type FieldType { get; }
@@ -63,6 +67,7 @@ namespace NCoreUtils.Data
     }
 
     [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
+    [System.CodeDom.Compiler.GeneratedCodeAttribute(""NCoreUtils.Data.Builders"", ""8.0.0.0"")]
     internal sealed class BuilderPropertyNameAttribute : System.Attribute
     {
         public string PropertyName { get; }
@@ -122,7 +127,7 @@ namespace NCoreUtils.Data
                 }
                 try
                 {
-                    var emitter = new BuilderEmitter(target.SemanticModel);
+                    var emitter = new BuilderEmitter(target.SemanticModel, ctx);
                     var unitSyntax = emitter.EmitCompilationUnit(target, builderNames);
                     ctx.AddSource($"{target.Type.Name}Builder.g.cs", unitSyntax.GetText(Utf8));
                 }
