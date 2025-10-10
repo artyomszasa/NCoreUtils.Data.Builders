@@ -39,13 +39,4 @@ internal static class DiagnosticDescriptors
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true
     );
-
-    public static DiagnosticDescriptor Documentation { get; } = new DiagnosticDescriptor(
-        id: "NUB000X",
-        title: "DOC",
-        messageFormat: "{0}: {1}",
-        category: "CodeGen",
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true
-    );
 }

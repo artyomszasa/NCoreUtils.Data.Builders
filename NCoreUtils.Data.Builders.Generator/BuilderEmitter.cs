@@ -718,6 +718,7 @@ internal class BuilderEmitter
                 )
             )
             .AddModifiers(
+                Token(SyntaxKind.PublicKeyword),
                 Token(SyntaxKind.PartialKeyword)
             )
             .AddMembers(members.ToArray());
