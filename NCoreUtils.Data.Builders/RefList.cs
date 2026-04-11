@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using NCoreUtils.Data.Builders.Internal;
 
 namespace NCoreUtils.Data.Builders;
 
@@ -12,7 +14,8 @@ public static class RefList
     public delegate TResult ItemBuilder<TSource, TResult>(ref TSource source)
         where TSource : struct;
 
-    private static readonly int[] _sizes =
+#if NET6_0_OR_GREATER
+    private static ReadOnlySpan<int> NextSizes =>
     [
         4,
         8,
@@ -30,6 +33,114 @@ public static class RefList
         16 * 1024
     ];
 
+#else
+
+    private static readonly int[] NextSizes =
+    [
+        4,
+        8,
+        16,
+        32,
+        48,
+        64,
+        80,
+        96,
+        128,
+        192,
+        256,
+        1024,
+        4096,
+        16 * 1024
+    ];
+
+#endif
+
+#if NET6_0_OR_GREATER
+
+#if NET8_0_OR_GREATER
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool Unsafe_AreSame<T>(in T ref1, in T ref2)
+        => Unsafe.AreSame(in ref1, in ref2);
+#else
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool Unsafe_AreSame<T>(in T ref1, in T ref2)
+        => Unsafe.AreSame(ref Unsafe.AsRef(in ref1), ref Unsafe.AsRef(in ref2));
+#endif
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ref readonly T Unsafe_Add<T>(in T @ref, int n)
+        => ref Unsafe.Add(ref Unsafe.AsRef(in @ref), n);
+
+    private static void Initialize_Ref<TSource, TData>(
+        ref TData destinationBegin,
+        in TSource sourceBegin,
+        in TSource sourceEnd,
+        Func<TSource, TData> selector)
+        where TData : struct
+    {
+        ref TData destinationIt = ref destinationBegin;
+        ref readonly TSource sourceIt = ref sourceBegin;
+        while (!Unsafe_AreSame(in sourceIt, in sourceEnd))
+        {
+            destinationIt = selector(sourceIt);
+            destinationIt = ref Unsafe.Add(ref destinationIt, 1);
+            sourceIt = ref Unsafe_Add(in sourceIt, 1);
+        }
+    }
+
+    private static void Initialize_Array<TSource, TData>(
+        ref TData destinationBegin,
+        TSource[] source,
+        Func<TSource, TData> selector)
+        where TData : struct
+    {
+        ref readonly TSource sourceBegin = ref MemoryMarshal.GetArrayDataReference(source);
+        ref readonly TSource sourceEnd = ref Unsafe_Add(sourceBegin, source.Length);
+        Initialize_Ref(ref destinationBegin, in sourceBegin, in sourceEnd, selector);
+    }
+
+    private static void Initialize_List<TSource, TData>(
+        ref TData destinationBegin,
+        List<TSource> source,
+        Func<TSource, TData> selector)
+        where TData : struct
+    {
+        ref readonly TSource sourceBegin = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(source));
+        ref readonly TSource sourceEnd = ref Unsafe_Add(sourceBegin, source.Count);
+        Initialize_Ref(ref destinationBegin, in sourceBegin, in sourceEnd, selector);
+    }
+
+
+    private static void Initialize<TSource, TData>(TData[] destination, IReadOnlyList<TSource> source, Func<TSource, TData> selector)
+        where TData : struct
+    {
+        switch (source)
+        {
+            case TSource[] arraySource:
+                Initialize_Array(
+                    ref MemoryMarshal.GetArrayDataReference(destination),
+                    arraySource,
+                    selector
+                );
+                break;
+            case List<TSource> listSource:
+                Initialize_List(
+                    ref MemoryMarshal.GetArrayDataReference(destination),
+                    listSource,
+                    selector
+                );
+                break;
+            default:
+                for (var i = 0; i < source.Count; ++i)
+                {
+                    destination[i] = selector(source[i]);
+                }
+                break;
+        }
+    }
+
+#endif
+
     /// <summary>
     /// Creates new instance of <see cref="RefList{T}" /> from source using selector. Source is guaranteed to be not
     /// <see langref="null" />.
@@ -43,9 +154,34 @@ public static class RefList
     {
         var count = list.Count;
         var data = new TData[NextCapacity(count)];
-        for (var i = 0; i < list.Count; ++i)
+#if NET6_0_OR_GREATER
+        Initialize(data, list, selector);
+#else
+        for (var i = 0; i < count; ++i)
         {
             data[i] = selector(list[i]);
+        }
+#endif
+        return new(data, count);
+    }
+
+    /// <summary>
+    /// Creates new instance of <see cref="RefList{T}" /> from source using selector. Source is guaranteed to be not
+    /// <see langref="null" />. Used when other optimizations are not possible but the element cooountis known.
+    /// </summary>
+    /// <typeparam name="TSource">Source type.</typeparam>
+    /// <typeparam name="TData">Item type.</typeparam>
+    /// <param name="source">Source.</param>
+    /// <param name="count">Element count.</param>
+    /// <param name="selector">Selector</param>
+    private static RefList<TData> CreateInternal<TSource, TData>(IEnumerable<TSource> source, int count, Func<TSource, TData> selector)
+        where TData : struct
+    {
+        var data = new TData[NextCapacity(count)];
+        var i = 0;
+        foreach (var item in source)
+        {
+            data[i++] = selector(item);
         }
         return new(data, count);
     }
@@ -56,7 +192,7 @@ public static class RefList
     /// </summary>
     /// <typeparam name="TSource">Source type.</typeparam>
     /// <typeparam name="TData">Item type.</typeparam>
-    /// <param name="list">Source.</param>
+    /// <param name="source">Source.</param>
     /// <param name="selector">Selector</param>
     private static RefList<TData> CreateInternal<TSource, TData>(IEnumerable<TSource> source, Func<TSource, TData> selector)
         where TData : struct
@@ -65,6 +201,12 @@ public static class RefList
         {
             return CreateInternal(list, selector);
         }
+#if NET6_0_OR_GREATER
+        if (Enumerable.TryGetNonEnumeratedCount(source, out var count))
+        {
+            return CreateInternal(source, count, selector);
+        }
+#else
         if (source is IReadOnlyCollection<TSource> collection)
         {
             var count = collection.Count;
@@ -76,12 +218,13 @@ public static class RefList
             }
             return new(data, count);
         }
-        return CreateInternal(source.ToList(), selector);
+#endif
+        return CreateInternal(source.ToArray(), selector);
     }
 
     internal static int NextCapacity(int value)
     {
-        foreach (var candidate in _sizes)
+        foreach (var candidate in NextSizes)
         {
             if (value <= candidate)
             {
@@ -94,51 +237,33 @@ public static class RefList
     public static RefList<TData> Create<TSource, TData>(IReadOnlyCollection<TSource> source, Func<TSource, TData> selector)
         where TData : struct
     {
-        if (source is null)
+        Check.NotNull(source);
+        if (source is IReadOnlyList<TSource> list)
         {
-            throw new ArgumentNullException(nameof(source));
+            return CreateInternal(list, selector);
         }
-        var data = new TData[NextCapacity(source.Count)];
-        var count = 0;
-        using var enumerator = source.GetEnumerator();
-        while (enumerator.MoveNext())
-        {
-            data[count] = selector(enumerator.Current);
-            ++count;
-        }
-        return new RefList<TData>(data, count);
+        return CreateInternal(source, source.Count, selector);
     }
 
     public static RefList<TData> Create<TSource, TData>(IEnumerable<TSource> source, Func<TSource, TData> selector)
         where TData : struct
     {
-        if (source is null)
-        {
-            throw new ArgumentNullException(nameof(source));
-        }
+        Check.NotNull(source);
         return CreateInternal(source, selector);
     }
 
     public static RefList<TData> CreateOrEmpty<TSource, TData>(IEnumerable<TSource>? source, Func<TSource, TData> selector)
         where TData : struct
-    {
-        if (source is null)
-        {
-            return Empty<TData>();
-        }
-        return CreateInternal(source, selector);
-    }
+        => source is null
+            ? Empty<TData>()
+            : CreateInternal(source, selector);
 
     [return: NotNullIfNotNull(nameof(source))]
     public static RefList<TData>? CreateOrDefault<TSource, TData>(IEnumerable<TSource>? source, Func<TSource, TData> selector)
         where TData : struct
-    {
-        if (source is null)
-        {
-            return default;
-        }
-        return CreateInternal(source, selector);
-    }
+        => source is null
+            ? default
+            : CreateInternal(source, selector);
 
     public static RefList<TData> Empty<TData>()
         where TData : struct
@@ -193,11 +318,8 @@ public class RefList<T> : IEnumerable<T>
     {
         get
         {
-            if (index < Count)
-            {
-                return ref _data[index];
-            }
-            throw new IndexOutOfRangeException();
+            Check.LessThan(index, Count);
+            return ref _data[index];
         }
     }
 
@@ -213,6 +335,8 @@ public class RefList<T> : IEnumerable<T>
         Count = 0;
     }
 
+    [Obsolete("Use factory methods instead")]
+    [ExcludeFromCodeCoverage]
     public RefList(IReadOnlyCollection<T> items)
         : this(items.Count)
     {
@@ -224,6 +348,7 @@ public class RefList<T> : IEnumerable<T>
         }
     }
 
+    [ExcludeFromCodeCoverage]
     IEnumerator IEnumerable.GetEnumerator()
         => ((IEnumerable<T>)this).GetEnumerator();
 
@@ -268,6 +393,8 @@ public class RefList<T> : IEnumerable<T>
         return ref newItem;
     }
 
+
+
     public void Clear()
     {
         Count = 0;
@@ -280,10 +407,7 @@ public class RefList<T> : IEnumerable<T>
 
     public void Insert(int index, T item)
     {
-        if (0 > index)
-        {
-            throw new IndexOutOfRangeException();
-        }
+        Check.GreaterThanOrEqual(index, 0);
         if (index >= Count)
         {
             Add(item);
@@ -339,10 +463,8 @@ public class RefList<T> : IEnumerable<T>
 
     public void RemoveAt(int index)
     {
-        if (0 > index || index >= Count)
-        {
-            throw new IndexOutOfRangeException();
-        }
+        Check.GreaterThanOrEqual(index, 0);
+        Check.LessThan(index, Count);
         for (var i = index + 1; i < Count; ++i)
         {
             _data[i - 1] = _data[i];
@@ -408,14 +530,10 @@ public class RefList<T> : IEnumerable<T>
 
     public void Swap(int index1, int index2)
     {
-        if (index1 < 0 || index1 >= Count)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index1));
-        }
-        if (index2 < 0 || index2 >= Count)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index2));
-        }
+        Check.GreaterThanOrEqual(index1, 0);
+        Check.LessThan(index1, Count);
+        Check.GreaterThanOrEqual(index2, 0);
+        Check.LessThan(index2, Count);
         if (index1 == index2)
         {
             return;

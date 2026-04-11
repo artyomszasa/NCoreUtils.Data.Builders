@@ -19,9 +19,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="coverlet.collector" Version="3.2.0">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    <PackageReference Include="ReportGenerator" Version="5.5.4">
       <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.msbuild" Version="8.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
   </ItemGroup>
 
@@ -29,5 +33,25 @@
     <ProjectReference Include="..\NCoreUtils.Data.Builders.Generator\NCoreUtils.Data.Builders.Generator.csproj" PrivateAssets="all" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
     <ProjectReference Include="..\NCoreUtils.Data.Builders\NCoreUtils.Data.Builders.csproj" />
   </ItemGroup>
+
+  <!-- **** -->
+  <Target Name="BeforeRunCoverageTests">
+    <PropertyGroup>
+      <CollectCoverage>true</CollectCoverage>
+      <CoverletOutputFormat>opencover</CoverletOutputFormat>
+      <CoverletOutput>$([System.IO.Path]::Combine($(MSBuildProjectDirectory), "coverage.opencover.xml"))</CoverletOutput>
+      <Threshold>0</Threshold>
+      <ThresholdType>line</ThresholdType>
+      <ThresholdStat>total</ThresholdStat>
+    </PropertyGroup>
+  </Target>
+  <Target Name="GenerateReport">
+    <Message Text="Generating report for $(CoverletOutput)" Importance="high" />
+    <ReportGenerator ReportFiles="$(CoverletOutput)" TargetDirectory="report" ReportTypes="Html" VerbosityLevel="Verbose" />
+  </Target>
+  <Target Name="RunCoverageTests" DependsOnTargets="BeforeRunCoverageTests">
+    <CallTarget Targets="VSTest" />
+    <MSBuild Projects="$(MSBuildProjectFile)" Targets="GenerateReport" Properties="TargetFramework=$(TargetFramework);CoverletOutput=$(CoverletOutput)" />
+  </Target>
 
 </Project>

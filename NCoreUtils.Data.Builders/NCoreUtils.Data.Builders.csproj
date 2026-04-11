@@ -9,4 +9,11 @@
   <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
     <Compile Include="..\Compat\**\*.cs" />
   </ItemGroup>
+  <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.1' ">
+    <Compile Include="..\Compat\CallerArgumentExpressionAttribute.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- NOTE: under reconsideration -->
+    <Compile Remove="IRefList.cs" />
+  </ItemGroup>
 </Project>
