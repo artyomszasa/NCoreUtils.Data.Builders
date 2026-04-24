@@ -18,6 +18,7 @@ public struct ManualNestedDataBuilder
     /// <param name="source"></param>
     public ManualNestedDataBuilder(ManualNestedData source)
     {
+        ArgumentNullException.ThrowIfNull(source);
         _str = source.Str;
     }
 

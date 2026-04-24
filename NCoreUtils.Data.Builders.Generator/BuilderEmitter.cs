@@ -60,7 +60,7 @@ internal class PropertyData
 
     public string SourcePropertyName => PropertySymbol.Name;
 
-    public PropertyData(SourceProductionContext context, SemanticModel semanticModel, IReadOnlyList<string> builderFullNames, IPropertySymbol property)
+    public PropertyData(SemanticModel semanticModel, IReadOnlyList<string> builderFullNames, IPropertySymbol property)
     {
         PropertySymbol = property ?? throw new ArgumentNullException(nameof(property));
         DocumentationComment = DocumentationCommentTrivia(
@@ -659,7 +659,7 @@ internal class BuilderEmitter
             if (property.DeclaredAccessibility == Accessibility.Public && !property.IsStatic
                 && !property.GetAttributes().Any(static attr => attr.AttributeClass?.Name == "BuilderIgnoreAttribute"))
             {
-                var data = new PropertyData(Context, SemanticModel, builderFullNames, property);
+                var data = new PropertyData(SemanticModel, builderFullNames, property);
                 if (data.IsNestedBuilder)
                 {
                     members.Add(EmitNestedBuilderField(data));
@@ -724,7 +724,7 @@ internal class BuilderEmitter
             .AddMembers(members.ToArray());
     }
 
-    private ClassDeclarationSyntax EmitExtensions(BuilderTarget target)
+    private static ClassDeclarationSyntax EmitExtensions(BuilderTarget target)
     {
         var builderTypeName = target.Type.Name + "Builder";
         var extensionTypeName = builderTypeName + "Extensions";

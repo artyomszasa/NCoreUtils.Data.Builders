@@ -1,0 +1,11 @@
+[RefList.cs]
+# CA1034: The ref struct enumerator is part of the intended public API
+dotnet_diagnostic.CA1034.severity = silent
+
+[RefListFindDelegate.cs]
+# CA1711: Delegate suffix is part of the established public API
+dotnet_diagnostic.CA1711.severity = silent
+
+[UpdateDelegate.cs]
+# CA1711: Delegate suffix is part of the established public API
+dotnet_diagnostic.CA1711.severity = silent
