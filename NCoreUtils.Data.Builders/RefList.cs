@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Contracts;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -9,8 +10,18 @@ using NCoreUtils.Data.Builders.Internal;
 
 namespace NCoreUtils.Data.Builders;
 
+/// <summary>
+/// Contains factory methods for creating instances of <see cref="RefList{T}"/>.
+/// </summary>
 public static class RefList
 {
+    /// <summary>
+    /// Defines a delegate for building an item of type <typeparamref name="TResult"/> from a source item of type <typeparamref name="TSource"/>.
+    /// </summary>
+    /// <typeparam name="TSource">The type of the source item, which must be a struct.</typeparam>
+    /// <typeparam name="TResult">The type of the result item.</typeparam>
+    /// <param name="source">A reference to the source item.</param>
+    /// <returns>The built result item.</returns>
     public delegate TResult ItemBuilder<TSource, TResult>(ref TSource source)
         where TSource : struct;
 
@@ -234,6 +245,14 @@ public static class RefList
         return value;
     }
 
+    /// <summary>
+    /// Creates a new <see cref="RefList{TData}"/> from a collection of source items.
+    /// </summary>
+    /// <typeparam name="TSource">The type of the source items.</typeparam>
+    /// <typeparam name="TData">The type of the items in the resulting <see cref="RefList{T}"/>, which must be a struct.</typeparam>
+    /// <param name="source">The source collection. Must not be null.</param>
+    /// <param name="selector">A function to transform each source item into a <typeparamref name="TData"/> item.</param>
+    /// <returns>A new <see cref="RefList{TData}"/> containing the transformed items.</returns>
     public static RefList<TData> Create<TSource, TData>(IReadOnlyCollection<TSource> source, Func<TSource, TData> selector)
         where TData : struct
     {
@@ -245,6 +264,14 @@ public static class RefList
         return CreateInternal(source, source.Count, selector);
     }
 
+    /// <summary>
+    /// Creates a new <see cref="RefList{TData}"/> from an enumerable of source items.
+    /// </summary>
+    /// <typeparam name="TSource">The type of the source items.</typeparam>
+    /// <typeparam name="TData">The type of the items in the resulting <see cref="RefList{T}"/>, which must be a struct.</typeparam>
+    /// <param name="source">The source enumerable. Must not be null.</param>
+    /// <param name="selector">A function to transform each source item into a <typeparamref name="TData"/> item.</param>
+    /// <returns>A new <see cref="RefList{TData}"/> containing the transformed items.</returns>
     public static RefList<TData> Create<TSource, TData>(IEnumerable<TSource> source, Func<TSource, TData> selector)
         where TData : struct
     {
@@ -252,12 +279,28 @@ public static class RefList
         return CreateInternal(source, selector);
     }
 
+    /// <summary>
+    /// Creates a new <see cref="RefList{TData}"/> from a nullable enumerable of source items, returning an empty list if the source is null.
+    /// </summary>
+    /// <typeparam name="TSource">The type of the source items.</typeparam>
+    /// <typeparam name="TData">The type of the items in the resulting <see cref="RefList{T}"/>, which must be a struct.</typeparam>
+    /// <param name="source">The source enumerable, which can be null.</param>
+    /// <param name="selector">A function to transform each source item into a <typeparamref name="TData"/> item.</param>
+    /// <returns>A new <see cref="RefList{TData}"/> containing the transformed items, or an empty list if the source is null.</returns>
     public static RefList<TData> CreateOrEmpty<TSource, TData>(IEnumerable<TSource>? source, Func<TSource, TData> selector)
         where TData : struct
         => source is null
             ? Empty<TData>()
             : CreateInternal(source, selector);
 
+    /// <summary>
+    /// Creates a new <see cref="RefList{TData}"/> from a nullable enumerable of source items, returning null if the source is null.
+    /// </summary>
+    /// <typeparam name="TSource">The type of the source items.</typeparam>
+    /// <typeparam name="TData">The type of the items in the resulting <see cref="RefList{T}"/>, which must be a struct.</typeparam>
+    /// <param name="source">The source enumerable, which can be null.</param>
+    /// <param name="selector">A function to transform each source item into a <typeparamref name="TData"/> item.</param>
+    /// <returns>A new <see cref="RefList{TData}"/> containing the transformed items, or null if the source is null.</returns>
     [return: NotNullIfNotNull(nameof(source))]
     public static RefList<TData>? CreateOrDefault<TSource, TData>(IEnumerable<TSource>? source, Func<TSource, TData> selector)
         where TData : struct
@@ -265,15 +308,28 @@ public static class RefList
             ? default
             : CreateInternal(source, selector);
 
+    /// <summary>
+    /// Creates an empty <see cref="RefList{TData}"/> with a default initial capacity.
+    /// </summary>
+    /// <typeparam name="TData">The type of items in the list, which must be a struct.</typeparam>
+    /// <returns>An empty <see cref="RefList{TData}"/>.</returns>
     public static RefList<TData> Empty<TData>()
         where TData : struct
         => new(4);
 }
 
+/// <summary>
+/// Represents a list of value types that can be accessed by reference, similar to <see cref="List{T}"/> but for structs and with by-ref access.
+/// </summary>
+/// <typeparam name="T">The type of elements in the list. Must be a value type.</typeparam>
 public class RefList<T> : IEnumerable<T>
     where T : struct
 {
 #if NET6_0_OR_GREATER
+    /// <summary>
+    /// Enumerates the elements of a <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <param name="source">The <see cref="RefList{T}"/> to enumerate.</param>
     [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref struct Enumerator(RefList<T> source)
     {
@@ -281,6 +337,9 @@ public class RefList<T> : IEnumerable<T>
 
         private int Index { get; set; } = -1;
 
+        /// <summary>
+        /// Gets the element at the current position of the enumerator.
+        /// </summary>
         public readonly ref T Current
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -294,6 +353,10 @@ public class RefList<T> : IEnumerable<T>
             }
         }
 
+        /// <summary>
+        /// Advances the enumerator to the next element of the <see cref="RefList{T}"/>.
+        /// </summary>
+        /// <returns><c>true</c> if the enumerator was successfully advanced to the next element; <c>false</c> if the enumerator has passed the end of the collection.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool MoveNext()
         {
@@ -310,10 +373,19 @@ public class RefList<T> : IEnumerable<T>
 
     private T[] _data;
 
+    /// <summary>
+    /// Gets the total number of elements the internal data structure can hold without resizing.
+    /// </summary>
     public int Capacity => _data.Length;
 
+    /// <summary>
+    /// Gets the number of elements contained in the <see cref="RefList{T}"/>.
+    /// </summary>
     public int Count { get; private set; }
 
+    /// <summary>
+    /// Gets a reference to the element at the specified index.
+    /// </summary>
     public ref T this[int index]
     {
         get
@@ -329,12 +401,20 @@ public class RefList<T> : IEnumerable<T>
         Count = count;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RefList{T}"/> class that is empty and has the specified initial capacity.
+    /// </summary>
+    /// <param name="capacity">The number of elements that the new list can initially store.</param>
     public RefList(int capacity)
     {
         _data = new T[RefList.NextCapacity(capacity)];
         Count = 0;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RefList{T}"/> class that contains elements copied from the specified collection.
+    /// </summary>
+    /// <param name="items">The collection whose elements are copied to the new list.</param>
     [Obsolete("Use factory methods instead")]
     [ExcludeFromCodeCoverage]
     public RefList(IReadOnlyCollection<T> items)
@@ -383,9 +463,18 @@ public class RefList<T> : IEnumerable<T>
         return ref item;
     }
 
+    /// <summary>
+    /// Adds an object to the end of the <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <param name="item">The object to be added to the end of the <see cref="RefList{T}"/>.</param>
     public void Add(T item)
         => AddUninitialized() = item;
 
+    /// <summary>
+    /// Adds an object to the end of the <see cref="RefList{T}"/> and returns a reference to the added item.
+    /// </summary>
+    /// <param name="item">The object to be added.</param>
+    /// <returns>A reference to the added item.</returns>
     public ref T AddAndGetRef(T item)
     {
         ref T newItem = ref AddUninitialized();
@@ -393,18 +482,28 @@ public class RefList<T> : IEnumerable<T>
         return ref newItem;
     }
 
-
-
+    /// <summary>
+    /// Removes all elements from the <see cref="RefList{T}"/>.
+    /// </summary>
     public void Clear()
     {
         Count = 0;
     }
 
 #if NET6_0_OR_GREATER
+    /// <summary>
+    /// Returns an enumerator that iterates through the <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <returns>An <see cref="Enumerator"/> for the <see cref="RefList{T}"/>.</returns>
     public Enumerator GetEnumerator()
         => new(this);
 #endif
 
+    /// <summary>
+    /// Inserts an element into the <see cref="RefList{T}"/> at the specified index.
+    /// </summary>
+    /// <param name="index">The zero-based index at which <paramref name="item"/> should be inserted.</param>
+    /// <param name="item">The object to insert.</param>
     public void Insert(int index, T item)
     {
         Check.GreaterThanOrEqual(index, 0);
@@ -424,13 +523,28 @@ public class RefList<T> : IEnumerable<T>
         }
     }
 
+    /// <summary>
+    /// Searches for the specified object and returns the zero-based index of the first occurrence within the entire <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <param name="item">The object to locate in the <see cref="RefList{T}"/>. The value can be <c>null</c> for reference types.</param>
+    /// <returns>The zero-based index of the first occurrence of <paramref name="item"/> within the entire <see cref="RefList{T}"/>, if found; otherwise, –1.</returns>
     public int IndexOf(T item)
         => Array.IndexOf(_data, item);
 
+    /// <summary>
+    /// Searches for an element that matches the conditions defined by the specified predicate, and returns the zero-based index of the first occurrence within the entire <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <param name="predicate">The <see cref="Predicate{T}"/> delegate that defines the conditions of the element to search for.</param>
+    /// <returns>The zero-based index of the first occurrence of an element that matches the conditions defined by <paramref name="predicate"/>, if found; otherwise, –1.</returns>
     public int FindIndex(Predicate<T> predicate)
         => Array.FindIndex(_data, predicate);
 
 #if NET6_0_OR_GREATER
+    /// <summary>
+    /// Searches for an element that matches the conditions defined by the specified predicate, and returns a reference to the first occurrence within the entire <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <param name="predicate">The predicate that defines the conditions of the element to search for.</param>
+    /// <returns>A reference to the first element that matches the conditions defined by the specified predicate, if found; otherwise, a null reference.</returns>
     public ref T Find(RefListFindDelegate<T> predicate)
     {
         foreach (ref T item in this)
@@ -443,6 +557,12 @@ public class RefList<T> : IEnumerable<T>
         return ref Unsafe.NullRef<T>();
     }
 
+    /// <summary>
+    /// Searches for an element that matches the conditions defined by the specified predicate, and returns a reference to it. If no such element is found, a new element is added and a reference to it is returned.
+    /// </summary>
+    /// <param name="predicate">The predicate that defines the conditions of the element to search for.</param>
+    /// <param name="found">When this method returns, contains <c>true</c> if the element was found; otherwise, <c>false</c>.</param>
+    /// <returns>A reference to the found or added element.</returns>
     public ref T FindOrAdd(RefListFindDelegate<T> predicate, out bool found)
     {
         foreach (ref T item in this)
@@ -457,10 +577,19 @@ public class RefList<T> : IEnumerable<T>
         return ref AddUninitialized();
     }
 
+    /// <summary>
+    /// Searches for an element that matches the conditions defined by the specified predicate, and returns a reference to it. If no such element is found, a new element is added and a reference to it is returned.
+    /// </summary>
+    /// <param name="predicate">The predicate that defines the conditions of the element to search for.</param>
+    /// <returns>A reference to the found or added element.</returns>
     public ref T FindOrAdd(RefListFindDelegate<T> predicate)
         => ref FindOrAdd(predicate, out _);
 #endif
 
+    /// <summary>
+    /// Removes the element at the specified index of the <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <param name="index">The zero-based index of the element to remove.</param>
     public void RemoveAt(int index)
     {
         Check.GreaterThanOrEqual(index, 0);
@@ -473,6 +602,11 @@ public class RefList<T> : IEnumerable<T>
     }
 
 #if NET6_0_OR_GREATER
+    /// <summary>
+    /// Removes the elements at the specified indices from the <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <param name="indices">The set of zero-based indices of the elements to remove.</param>
+    /// <returns>The number of elements removed from the <see cref="RefList{T}"/>.</returns>
     public int RemoveAt(IReadOnlySet<int> indices)
     {
         var removed = 0;
@@ -501,6 +635,11 @@ public class RefList<T> : IEnumerable<T>
     }
 #endif
 
+    /// <summary>
+    /// Removes all the elements that match the conditions defined by the specified predicate.
+    /// </summary>
+    /// <param name="predicate">The delegate that defines the conditions of the elements to remove.</param>
+    /// <returns>The number of elements removed from the <see cref="RefList{T}"/>.</returns>
     public int RemoveAll(RefListFindDelegate<T> predicate)
     {
         var removed = 0;
@@ -528,6 +667,11 @@ public class RefList<T> : IEnumerable<T>
         return removed;
     }
 
+    /// <summary>
+    /// Swaps the elements at the specified indices in the <see cref="RefList{T}"/>.
+    /// </summary>
+    /// <param name="index1">The index of the first element to swap.</param>
+    /// <param name="index2">The index of the second element to swap.</param>
     public void Swap(int index1, int index2)
     {
         Check.GreaterThanOrEqual(index1, 0);
@@ -541,6 +685,12 @@ public class RefList<T> : IEnumerable<T>
         (_data[index2], _data[index1]) = (_data[index1], _data[index2]);
     }
 
+    /// <summary>
+    /// Creates a read-only list of a specified type from the <see cref="RefList{T}"/>, transforming each element using the provided builder.
+    /// </summary>
+    /// <typeparam name="TResult">The type of elements in the resulting list.</typeparam>
+    /// <param name="builder">The delegate that transforms each element of the <see cref="RefList{T}"/>.</param>
+    /// <returns>A read-only list containing the transformed elements.</returns>
     public IReadOnlyList<TResult> Build<TResult>(RefList.ItemBuilder<T, TResult> builder)
     {
         var result = new List<TResult>(Count);
@@ -551,6 +701,12 @@ public class RefList<T> : IEnumerable<T>
         return result;
     }
 
+    /// <summary>
+    /// Creates a read-only list of a specified reference type from the <see cref="RefList{T}"/>, transforming each element using the provided builder and excluding null results.
+    /// </summary>
+    /// <typeparam name="TResult">The type of elements in the resulting list, which must be a class.</typeparam>
+    /// <param name="builder">The delegate that transforms each element of the <see cref="RefList{T}"/> into a nullable result.</param>
+    /// <returns>A read-only list containing the non-null transformed elements.</returns>
     public IReadOnlyList<TResult> BuildOptional<TResult>(RefList.ItemBuilder<T, TResult?> builder)
         where TResult : class
     {

@@ -5,6 +5,7 @@
     <LangVersion>12.0</LangVersion>
     <IsTrimmable>True</IsTrimmable>
     <IsAotCompatible>True</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
     <Compile Include="..\Compat\**\*.cs" />
