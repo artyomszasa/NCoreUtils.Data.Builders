@@ -8,6 +8,19 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <Version>8.0.0-rc09</Version>
   </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisMode>All</AnalysisMode>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="CodeAnalysis\MaybeNullWhen.cs" />
+    <Compile Remove="CodeAnalysis\MemberNotNullWhenAttribute.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\shared\CodeAnalysis\NullableAttributes.cs" />
+    <Compile Include="..\shared\CompilerServices\**" />
+    <Compile Include="..\shared\Check.cs" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.6.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4">

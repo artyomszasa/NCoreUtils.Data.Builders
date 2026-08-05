@@ -1,0 +1,11 @@
+# Top level entry required to mark this as a global AnalyzerConfig file
+is_global = true
+
+# CS1591: Generated test builders do not need XML documentation
+dotnet_diagnostic.CS1591.severity = silent
+
+# CA1720: Existing test names are kept for readability
+dotnet_diagnostic.CA1720.severity = silent
+
+# CA1815: Test helper structs do not need equality boilerplate
+dotnet_diagnostic.CA1815.severity = silent

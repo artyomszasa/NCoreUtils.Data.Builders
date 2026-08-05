@@ -94,10 +94,8 @@ public static class RefList
     public static RefList<TData> Create<TSource, TData>(IReadOnlyCollection<TSource> source, Func<TSource, TData> selector)
         where TData : struct
     {
-        if (source is null)
-        {
-            throw new ArgumentNullException(nameof(source));
-        }
+        source.ThrowIfNull();
+        selector.ThrowIfNull();
         var data = new TData[NextCapacity(source.Count)];
         var count = 0;
         using var enumerator = source.GetEnumerator();
@@ -112,16 +110,15 @@ public static class RefList
     public static RefList<TData> Create<TSource, TData>(IEnumerable<TSource> source, Func<TSource, TData> selector)
         where TData : struct
     {
-        if (source is null)
-        {
-            throw new ArgumentNullException(nameof(source));
-        }
+        source.ThrowIfNull();
+        selector.ThrowIfNull();
         return CreateInternal(source, selector);
     }
 
     public static RefList<TData> CreateOrEmpty<TSource, TData>(IEnumerable<TSource>? source, Func<TSource, TData> selector)
         where TData : struct
     {
+        selector.ThrowIfNull();
         if (source is null)
         {
             return Empty<TData>();
@@ -133,6 +130,7 @@ public static class RefList
     public static RefList<TData>? CreateOrDefault<TSource, TData>(IEnumerable<TSource>? source, Func<TSource, TData> selector)
         where TData : struct
     {
+        selector.ThrowIfNull();
         if (source is null)
         {
             return default;
@@ -197,7 +195,7 @@ public class RefList<T> : IEnumerable<T>
             {
                 return ref _data[index];
             }
-            throw new IndexOutOfRangeException();
+            throw new ArgumentOutOfRangeException(nameof(index));
         }
     }
 
@@ -214,7 +212,7 @@ public class RefList<T> : IEnumerable<T>
     }
 
     public RefList(IReadOnlyCollection<T> items)
-        : this(items.Count)
+        : this(items.ThrowIfNull().Count)
     {
         using var enumerator = items.GetEnumerator();
         while (enumerator.MoveNext())
@@ -282,7 +280,7 @@ public class RefList<T> : IEnumerable<T>
     {
         if (0 > index)
         {
-            throw new IndexOutOfRangeException();
+            throw new ArgumentOutOfRangeException(nameof(index));
         }
         if (index >= Count)
         {
@@ -304,11 +302,15 @@ public class RefList<T> : IEnumerable<T>
         => Array.IndexOf(_data, item);
 
     public int FindIndex(Predicate<T> predicate)
-        => Array.FindIndex(_data, predicate);
+    {
+        predicate.ThrowIfNull();
+        return Array.FindIndex(_data, predicate);
+    }
 
 #if NET6_0_OR_GREATER
     public ref T Find(RefListFindDelegate<T> predicate)
     {
+        predicate.ThrowIfNull();
         foreach (ref T item in this)
         {
             if (predicate(in item))
@@ -321,6 +323,7 @@ public class RefList<T> : IEnumerable<T>
 
     public ref T FindOrAdd(RefListFindDelegate<T> predicate, out bool found)
     {
+        predicate.ThrowIfNull();
         foreach (ref T item in this)
         {
             if (predicate(in item))
@@ -341,7 +344,7 @@ public class RefList<T> : IEnumerable<T>
     {
         if (0 > index || index >= Count)
         {
-            throw new IndexOutOfRangeException();
+            throw new ArgumentOutOfRangeException(nameof(index));
         }
         for (var i = index + 1; i < Count; ++i)
         {
@@ -353,6 +356,7 @@ public class RefList<T> : IEnumerable<T>
 #if NET6_0_OR_GREATER
     public int RemoveAt(IReadOnlySet<int> indices)
     {
+        indices.ThrowIfNull();
         var removed = 0;
         for (var i = 0; i < Count; ++i)
         {
@@ -381,6 +385,7 @@ public class RefList<T> : IEnumerable<T>
 
     public int RemoveAll(RefListFindDelegate<T> predicate)
     {
+        predicate.ThrowIfNull();
         var removed = 0;
         for (var i = 0; i < Count; ++i)
         {
@@ -425,6 +430,7 @@ public class RefList<T> : IEnumerable<T>
 
     public IReadOnlyList<TResult> Build<TResult>(RefList.ItemBuilder<T, TResult> builder)
     {
+        builder.ThrowIfNull();
         var result = new List<TResult>(Count);
         for (var i = 0; i < Count; ++i)
         {
@@ -436,6 +442,7 @@ public class RefList<T> : IEnumerable<T>
     public IReadOnlyList<TResult> BuildOptional<TResult>(RefList.ItemBuilder<T, TResult?> builder)
         where TResult : class
     {
+        builder.ThrowIfNull();
         var result = new List<TResult>(Count);
         for (var i = 0; i < Count; ++i)
         {

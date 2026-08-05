@@ -8,14 +8,8 @@ internal static class EnumerableExtensions
 {
     public static bool TryGetFirst<T>(this IEnumerable<T> source, Func<T, bool> predicate, [MaybeNullWhen(false)] out T match)
     {
-        if (source is null)
-        {
-            throw new ArgumentNullException(nameof(source));
-        }
-        if (predicate is null)
-        {
-            throw new ArgumentNullException(nameof(predicate));
-        }
+        source.ThrowIfNull();
+        predicate.ThrowIfNull();
         foreach (var item in source)
         {
             if (predicate(item))
