@@ -49,6 +49,10 @@ public partial class BuilderGenerator
             );
             return (false, expr);
         }
+        if (!builderPropertyType.IsValueType && builderPropertyType.HasNullableAnnotation)
+        {
+            return (false, BuilderEmitter.NullLiteral);
+        }
         var getDefaultValueMethodName = Names.GetDefaultValueMethod(builderPropertyName);
         if (targetSymbol is not null && targetSymbol.GetMembers().OfType<IMethodSymbol>().TryGetFirst(m => m.Name == getDefaultValueMethodName, out var m))
         {

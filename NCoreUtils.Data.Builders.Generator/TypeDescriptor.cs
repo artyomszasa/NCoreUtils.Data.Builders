@@ -71,4 +71,13 @@ internal partial class TypeDescriptor(
 
     public override int GetHashCode()
         => StringComparer.Ordinal.GetHashCode(QualifiedName);
+
+    public override string ToString()
+    {
+        if (IsValueType)
+        {
+            return $"struct {QualifiedName}";
+        }
+        return $"class {QualifiedName}";
+    }
 }

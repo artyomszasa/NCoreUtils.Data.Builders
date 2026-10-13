@@ -5,6 +5,16 @@ namespace NCoreUtils.Data;
 
 internal partial class TypeDescriptor
 {
+    public static SymbolDisplayFormat MaybeNullableFullyQualifiedFormat { get; } =
+            new SymbolDisplayFormat(
+                globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+                typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+                miscellaneousOptions:
+                    SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+                    SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
+                    SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
     private static string GetSafeName(ITypeSymbol symbol)
     {
         if (symbol is INamedTypeSymbol named && named.IsGenericType)
@@ -35,7 +45,7 @@ internal partial class TypeDescriptor
         return new TypeDescriptor(
             type.IsValueType,
             !type.IsValueType && type.NullableAnnotation == NullableAnnotation.Annotated,
-            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            type.ToDisplayString(MaybeNullableFullyQualifiedFormat),
             GetSafeName(type),
             isBuilder,
             isRefList,

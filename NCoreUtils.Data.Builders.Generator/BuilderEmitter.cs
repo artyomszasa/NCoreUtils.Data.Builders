@@ -84,7 +84,7 @@ internal static partial class BuilderEmitter
 
     private static ConstructorDeclarationSyntax EmitCtor(BuilderDescriptor target)
     {
-        var bodyStatements = target.Members.Select(m =>
+        var memberStatements = target.Members.Select(m =>
         {
             if (m is null)
             {
@@ -156,7 +156,20 @@ internal static partial class BuilderEmitter
                 SimpleMemberAccessExpression(IdentifierNames.source, IdentifierName(m.SourcePropertyName))
             ));
         });
-        var body = Block(bodyStatements);
+        var customStatements = target.CustomFields.Select(customField =>
+        {
+            return ExpressionStatement(
+                InvocationExpression(
+                    customField.InitializerNameSyntax,
+                    ArgumentList(SeparatedList(new []
+                    {
+                        Argument(IdentifierNames.source),
+                        Argument(default, Token(SyntaxKind.OutKeyword), customField.FieldSyntax)
+                    }))
+                )
+            );
+        });
+        var body = Block(memberStatements.Concat(customStatements));
         var documentationComment = DocumentationCommentTrivia(
             SyntaxKind.SingleLineDocumentationCommentTrivia,
             List(new XmlNodeSyntax[]
@@ -169,7 +182,7 @@ internal static partial class BuilderEmitter
                         XmlName("see"),
                         List(new XmlAttributeSyntax[]
                         {
-                            XmlCrefAttribute(TypeCref(IdentifierName(target.BuilderName)))
+                            XmlCrefAttribute(TypeCref(target.BuilderTypeSyntax))
                         })
                     ),
                     XmlText($".")
@@ -255,14 +268,21 @@ internal static partial class BuilderEmitter
                 BuilderPropertyDescriptor p when p.IsInt32List => BuildInt32ListExpression(p),
                 BuilderPropertyDescriptor p when p.IsStringList => BuildStringListExpression(p),
                 BuilderPropertyDescriptor p when p.IsRefList => BuildRefListExpression(p),
-                _ when m.PublicType.IsValueType || m.PublicType.HasNullableAnnotation => m.FieldIdentifier,
+                _ when m.SourcePropertyType.IsValueType || m.SourcePropertyType.HasNullableAnnotation => m.FieldIdentifier,
                 _ => BinaryExpression(
                     SyntaxKind.CoalesceExpression,
                     m.FieldIdentifier,
                     m.DefaultValueSyntax
                 )
             };
-            return NamedArg(parameterName, expr);
+            var namedArgExpr = NamedArg(parameterName, expr);
+#if DEBUG
+            namedArgExpr = namedArgExpr.WithLeadingTrivia(
+                EndOfLine,
+                Comment($"// {m.SourcePropertyType} => {m.PublicType}")
+            );
+#endif
+            return namedArgExpr;
         }));
         var documentationComment = DocumentationCommentTrivia(
             SyntaxKind.SingleLineDocumentationCommentTrivia,
@@ -298,7 +318,11 @@ internal static partial class BuilderEmitter
                     ObjectCreationExpression(
                         Token(SyntaxKind.NewKeyword),
                         target.SourceType.Syntax,
-                        ArgumentList(argList),
+                        ArgumentList(
+                            openParenToken: Tokens.OpenParen,
+                            arguments: argList,
+                            closeParenToken: Tokens.CloseParen
+                        ),
                         null
                     )
                 )
@@ -327,22 +351,22 @@ internal static partial class BuilderEmitter
         return StructDeclaration(target.BuilderName)
             .AddAttributeLists(
                 AttributeList(
-                    Token(
+                    openBracketToken: Token(
                         target.DocumentationComment is DocumentationCommentTriviaSyntax doc
                             ? TriviaList(Trivia(doc))
                             : TriviaList(),
                         SyntaxKind.OpenBracketToken,
                         TriviaList()
                     ),
-                    default,
-                    SingletonSeparatedList(
+                    target: default,
+                    attributes: SingletonSeparatedList(
                         Attribute(ParseName("System.CodeDom.Compiler.GeneratedCodeAttribute"), AttributeArgumentList(SeparatedList(new AttributeArgumentSyntax[]
                         {
                             AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("NCoreUtils.Data.Builders"))),
                             AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(SelfVersion)))
                         })))
                     ),
-                    Token(SyntaxKind.CloseBracketToken)
+                    closeBracketToken: Token(SyntaxKind.CloseBracketToken)
                 )
             )
             .AddModifiers(
@@ -356,20 +380,86 @@ internal static partial class BuilderEmitter
     {
         var extensionTypeName = target.BuilderName + "Extensions";
         var delegateTypeSyntax = Types.UpdateDelegate(target.BuilderTypeSyntax);
+
+        var classDocumentationComment = DocumentationCommentTrivia(
+            SyntaxKind.SingleLineDocumentationCommentTrivia,
+            List(new XmlNodeSyntax[]
+            {
+                XmlText(XmlTextLiteral(TriviaList(DocumentationCommentExterior("///")), " ", " ", TriviaList())),
+                XmlElement("summary", List(new XmlNodeSyntax[]
+                {
+                    XmlText($"Provides extension method for creating modified "),
+                    XmlEmptyElement(
+                        XmlName("see"),
+                        List(new XmlAttributeSyntax[]
+                        {
+                            XmlCrefAttribute(TypeCref(target.SourceType.Syntax))
+                        })
+                    ),
+                    XmlText($" via "),
+                    XmlEmptyElement(
+                        XmlName("see"),
+                        List(new XmlAttributeSyntax[]
+                        {
+                            XmlCrefAttribute(TypeCref(target.BuilderTypeSyntax))
+                        })
+                    ),
+                    XmlText($".")
+                })),
+                XmlText(XmlTextNewLine(TriviaList(), "\r\n", "\r\n", TriviaList()))
+            }),
+            Token(SyntaxKind.EndOfDocumentationCommentToken)
+        ).WithTrailingTrivia(EndOfLine("\r\n"));
+
+        var methodDocumentationComment = DocumentationCommentTrivia(
+            SyntaxKind.SingleLineDocumentationCommentTrivia,
+            List(new XmlNodeSyntax[]
+            {
+                XmlText(XmlTextLiteral(TriviaList(DocumentationCommentExterior("///")), " ", " ", TriviaList())),
+                XmlElement("summary", List(new XmlNodeSyntax[]
+                {
+                    XmlText($"Creates modified "),
+                    XmlEmptyElement(
+                        XmlName("see"),
+                        List(new XmlAttributeSyntax[]
+                        {
+                            XmlCrefAttribute(TypeCref(target.SourceType.Syntax))
+                        })
+                    ),
+                    XmlText($" that is updated via "),
+                    XmlEmptyElement(
+                        XmlName("see"),
+                        List(new XmlAttributeSyntax[]
+                        {
+                            XmlCrefAttribute(TypeCref(target.BuilderTypeSyntax))
+                        })
+                    ),
+                    XmlText($".")
+                })),
+                XmlText(XmlTextNewLine(TriviaList(), "\r\n", "\r\n", TriviaList()))
+            }),
+            Token(SyntaxKind.EndOfDocumentationCommentToken)
+        ).WithTrailingTrivia(EndOfLine("\r\n"));
+
         return ClassDeclaration(extensionTypeName)
             .AddAttributeLists(
-                AttributeList(SingletonSeparatedList(
-                    Attribute(ParseName("System.CodeDom.Compiler.GeneratedCodeAttribute"), AttributeArgumentList(SeparatedList(new AttributeArgumentSyntax[]
-                    {
-                        AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("NCoreUtils.Data.Builders"))),
-                        AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(SelfVersion)))
-                    })))
-                ))
+                AttributeList(
+                    openBracketToken: Tokens.OpenBracket.WithLeadingTrivia(Trivia(classDocumentationComment)),
+                    target: default,
+                    attributes: SingletonSeparatedList(
+                        Attribute(ParseName("System.CodeDom.Compiler.GeneratedCodeAttribute"), AttributeArgumentList(SeparatedList(new AttributeArgumentSyntax[]
+                        {
+                            AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal("NCoreUtils.Data.Builders"))),
+                            AttributeArgument(LiteralExpression(SyntaxKind.StringLiteralExpression, Literal(SelfVersion)))
+                        }))
+                    )),
+                    closeBracketToken: Tokens.CloseBracket
+                )
             )
-            .AddModifiers(Keywords.Static)
+            .AddModifiers(Keywords.Public, Keywords.Static)
             .AddMembers(
                 MethodDeclaration(target.SourceType.Syntax, "Update")
-                    .WithModifiers(TokenList(Keywords.Public, Keywords.Static))
+                    .WithModifiers(TokenList(Token(SyntaxKind.PublicKeyword).WithLeadingTrivia(Trivia(methodDocumentationComment)), Keywords.Static))
                     .WithParameterList(ParameterList(SeparatedList(new []
                     {
                         Parameter(Identifiers.source).WithType(target.SourceType.Syntax).WithModifiers(TokenList(Keywords.This)),

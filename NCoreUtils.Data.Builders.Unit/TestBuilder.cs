@@ -27,3 +27,17 @@ public struct ManualNestedDataBuilder
     /// <returns></returns>
     public readonly ManualNestedData Build() => new ManualNestedData(_str);
 }
+
+/// <summary>
+/// Builder.
+/// </summary>
+public partial struct TestDataBuilder
+{
+    private static void InitializeInitializedCount(TestData source, out int initializedCount)
+        => initializedCount = source.InitializedCount;
+
+    private static int BuildInitializedCount(in int initializedCount)
+        => initializedCount;
+
+    private static List<List<string?>> GetDefaultListOfNullableStringsValue() => [];
+}

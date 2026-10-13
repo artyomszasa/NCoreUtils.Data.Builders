@@ -12,9 +12,9 @@ internal partial class BuilderEmitter
 
     private static SyntaxTrivia EndOfLine { get; } = EndOfLine("\r\n");
 
-    private static LiteralExpressionSyntax NullLiteral { get; } = LiteralExpression(SyntaxKind.NullLiteralExpression);
+    internal static LiteralExpressionSyntax NullLiteral { get; } = LiteralExpression(SyntaxKind.NullLiteralExpression);
 
-    public static LiteralExpressionSyntax DefaultLiteral { get; } = LiteralExpression(SyntaxKind.DefaultLiteralExpression);
+    internal static LiteralExpressionSyntax DefaultLiteral { get; } = LiteralExpression(SyntaxKind.DefaultLiteralExpression);
 
     public static class Keywords
     {
@@ -39,6 +39,15 @@ internal partial class BuilderEmitter
     private static class Tokens
     {
         public static SyntaxToken Semicolon { get; } = Token(SyntaxKind.SemicolonToken);
+
+        public static SyntaxToken CloseBracket { get; } = Token(SyntaxKind.CloseBracketToken);
+
+        public static SyntaxToken CloseParen { get; } = Token(SyntaxKind.CloseParenToken);
+
+        public static SyntaxToken OpenBracket { get; } = Token(SyntaxKind.OpenBracketToken);
+
+        public static SyntaxToken OpenParen { get; } = Token(SyntaxKind.OpenParenToken);
+
     }
 
     public static class Identifiers

@@ -13,7 +13,8 @@ internal class BuilderDescriptor(
     string builderName,
     bool generateDocumentationComment,
     TypeDescriptor sourceType,
-    ImmutableArray<BuilderMemberDescriptor> members)
+    ImmutableArray<BuilderMemberDescriptor> members,
+    ImmutableArray<BuilderCustomFieldDescriptor> customFields)
     : IEquatable<BuilderDescriptor>
 {
     private TypeSyntax? _builderTypeSyntax;
@@ -40,6 +41,8 @@ internal class BuilderDescriptor(
     public TypeDescriptor SourceType { get; } = sourceType;
 
     public ImmutableArray<BuilderMemberDescriptor> Members { get; } = members;
+
+    public ImmutableArray<BuilderCustomFieldDescriptor> CustomFields { get; } = customFields;
 
     /// <summary>
     /// If builder has non-generated partial class then documentation should be there (thus this property is null),
@@ -82,5 +85,6 @@ internal class BuilderDescriptor(
             && StringComparer.Ordinal.Equals(BuilderNamespace, other.BuilderNamespace)
             && StringComparer.Ordinal.Equals(BuilderName, other.BuilderName)
             && SourceType == other.SourceType
-            && Members.SequenceEqual(other.Members);
+            && Members.SequenceEqual(other.Members)
+            && CustomFields.SequenceEqual(other.CustomFields);
 }

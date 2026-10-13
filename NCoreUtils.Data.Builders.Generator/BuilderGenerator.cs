@@ -169,8 +169,8 @@ namespace NCoreUtils.Data
                     constructorParameterName: constructorParameterNames[property],
                     hasDefaultValueMethod: hasDefaultValueMethod,
                     defaultValueSyntax: defaultValueSyntax,
-                    hasInitializerMethod: HasMethod(builderMemberPropertySymbol, Names.InitializeMethod(builderPropertyName)),
-                    hasBuildMethod: HasMethod(builderMemberPropertySymbol, Names.BuildMethod(builderPropertyName)),
+                    hasInitializerMethod: HasMethod(builder, Names.InitializeMethod(builderPropertyName)),
+                    hasBuildMethod: HasMethod(builder, Names.BuildMethod(builderPropertyName)),
                     type: builderPropertyType,
                     fieldName: builderPropertyName
                 );
@@ -184,8 +184,8 @@ namespace NCoreUtils.Data
                     constructorParameterName: constructorParameterNames[property],
                     hasDefaultValueMethod: hasDefaultValueMethod,
                     defaultValueSyntax: defaultValueSyntax,
-                    hasInitializerMethod: HasMethod(builderMemberPropertySymbol, Names.InitializeMethod(builderPropertyName)),
-                    hasBuildMethod: HasMethod(builderMemberPropertySymbol, Names.BuildMethod(builderPropertyName)),
+                    hasInitializerMethod: HasMethod(builder, Names.InitializeMethod(builderPropertyName)),
+                    hasBuildMethod: HasMethod(builder, Names.BuildMethod(builderPropertyName)),
                     fieldType: context.CreateBackingFieldType(builderPropertyType),
                     propertyType: builderPropertyType,
                     fieldName: $"_{builderPropertyName.Uncapitalize()}",
@@ -247,14 +247,37 @@ namespace NCoreUtils.Data
             => source is not null && source.GetMembers().Any(m => m is IMethodSymbol ms && StringComparer.Ordinal.Equals(ms.Name, name));
     }
 
+    private static ImmutableArray<BuilderCustomFieldDescriptor> ExtractCustomFields(
+        BuilderTargetContext context,
+        ITypeSymbol? builderType)
+    {
+        if (builderType is null)
+        {
+            return ImmutableArray<BuilderCustomFieldDescriptor>.Empty;
+        }
+        ImmutableArray<BuilderCustomFieldDescriptor>.Builder? fields = default;
+        foreach (var builderMember in builderType.GetMembers())
+        {
+            if (builderMember is IFieldSymbol builderField
+                && builderField.GetAttributes().Any(a => a.AttributeClass?.Name == "BuilderFieldAttribute"))
+            {
+                (fields ??= ImmutableArray.CreateBuilder<BuilderCustomFieldDescriptor>()).Add(new BuilderCustomFieldDescriptor(
+                    builderField.Name,
+                    context.GetOrCreate(builderField.Type, isBuilder: false)
+                ));
+            }
+        }
+        return fields is null ? ImmutableArray<BuilderCustomFieldDescriptor>.Empty : fields.ToImmutable();
+    }
+
     private static IEnumerable<DescriptorOrError> EnumerateDescriptors(ImmutableArray<BuilderTarget> targets, CancellationToken cancellationToken)
     {
         if (targets.Length == 0)
         {
             yield break;
         }
-        var semanticModel = targets[0].SemanticModel;
-        if (targets.TryGetFirst(target => !ReferenceEquals(target.SemanticModel, semanticModel), out var xtarget))
+        var compilation = targets[0].SemanticModel.Compilation;
+        if (targets.TryGetFirst(target => !ReferenceEquals(target.SemanticModel.Compilation, compilation), out var xtarget))
         {
             yield return new DiagnosticData(
                 descriptor: DiagnosticDescriptors.InvalidSemanticModel,
@@ -263,20 +286,21 @@ namespace NCoreUtils.Data
             );
             yield break;
         }
-        var context = new BuilderTargetContext(semanticModel, new HashSet<string>(targets.Select(target => target.TargetFullName), StringComparer.Ordinal));
+        var context = new BuilderTargetContext(compilation, new HashSet<string>(targets.Select(target => target.TargetFullName), StringComparer.Ordinal));
         foreach (var target in targets)
         {
             cancellationToken.ThrowIfCancellationRequested();
             List<DescriptorOrError> results = new(4);
             try
             {
-                var builderPartial = semanticModel.Compilation.GetTypeByMetadataName(target.TargetFullName);
+                var builderPartial = compilation.GetTypeByMetadataName(target.TargetFullName);
                 results.Add(new BuilderDescriptor(
                     builderNamespace: target.TargetNamespace,
                     builderName: target.TargetName,
                     generateDocumentationComment: builderPartial is null,
                     sourceType: context.GetOrCreate(target.Type, false),
-                    members: ExtractMembers(context, target.Type, builderPartial, cancellationToken).ToImmutableArray()
+                    members: ExtractMembers(context, target.Type, builderPartial, cancellationToken).ToImmutableArray(),
+                    customFields: ExtractCustomFields(context, builderPartial)
                 ));
             }
             catch (BuilderGenerationException exn)

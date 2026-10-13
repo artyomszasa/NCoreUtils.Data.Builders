@@ -8,9 +8,7 @@ namespace NCoreUtils.Data;
 
 internal class BuilderTargetContext
 {
-    private ConcurrentDictionary<ITypeSymbol, TypeDescriptor> DescriptorCache { get; } = new(SymbolEqualityComparer.Default);
-
-    // private ConcurrentDictionary<ITypeSymbol, TypeDescriptor> ListDescriptors { get; } = new(SymbolEqualityComparer.Default);
+    private ConcurrentDictionary<ITypeSymbol, TypeDescriptor> DescriptorCache { get; } = new(SymbolEqualityComparer.IncludeNullability);
 
     private TypeDescriptor? _listOfInt32;
 
@@ -20,9 +18,9 @@ internal class BuilderTargetContext
 
     private Func<ITypeSymbol, TypeDescriptor> FactoryBuilder { get; }
 
-    private Compilation Compilation => SemanticModel.Compilation;
+    private Compilation Compilation { get; }
 
-    public SemanticModel SemanticModel { get; }
+    // public SemanticModel SemanticModel { get; }
 
     public HashSet<string> KnownBuilderNames { get; }
 
@@ -42,20 +40,20 @@ internal class BuilderTargetContext
     public TypeDescriptor ListOfString
         => _listOfString ??= GetOrCreate(ListOfT.Construct(Compilation.GetSpecialType(SpecialType.System_String)), false);
 
-    public BuilderTargetContext(SemanticModel semanticModel, HashSet<string> knownBuilderNames)
+    public BuilderTargetContext(Compilation compilation, HashSet<string> knownBuilderNames)
     {
-        RefListOfT = semanticModel.Compilation.GetTypeByMetadataName("NCoreUtils.Data.Builders.RefList`1")
+        RefListOfT = compilation.GetTypeByMetadataName("NCoreUtils.Data.Builders.RefList`1")
             ?? throw new InvalidOperationException("Could not get RefList<T> symbol.");
-        IReadOnlyListOfT = semanticModel.Compilation.GetTypeByMetadataName("System.Collections.Generic.IReadOnlyList`1")
+        IReadOnlyListOfT = compilation.GetTypeByMetadataName("System.Collections.Generic.IReadOnlyList`1")
             ?? throw new InvalidOperationException("Could not get IReadOnlyList<T> symbol.");
-        ListOfT = semanticModel.Compilation.GetTypeByMetadataName("System.Collections.Generic.List`1")
+        ListOfT = compilation.GetTypeByMetadataName("System.Collections.Generic.List`1")
             ?? throw new InvalidOperationException("Could not get List<T> symbol.");
-        String = semanticModel.Compilation.GetSpecialType(SpecialType.System_String);
-        Int32 = semanticModel.Compilation.GetSpecialType(SpecialType.System_Int32);
+        String = compilation.GetSpecialType(SpecialType.System_String);
+        Int32 = compilation.GetSpecialType(SpecialType.System_Int32);
         FactoryNonBuilder = type => TypeDescriptor.Create(type, this, false);
         FactoryBuilder = type => TypeDescriptor.Create(type, this, true);
-        SemanticModel = semanticModel;
         KnownBuilderNames = knownBuilderNames;
+        Compilation = compilation;
     }
 
     public ITypeSymbol RefList(ITypeSymbol elementType)
@@ -115,7 +113,7 @@ internal class BuilderTargetContext
         {
             var elementNamespace = named.ContainingNamespace.ToDisplayString(new(typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces));
             var candidateBuilderQualifiedName = elementNamespace + ".Builders." + named.Name + "Builder";
-            var existingBuilderType = SemanticModel.Compilation.GetTypeByMetadataName(candidateBuilderQualifiedName);
+            var existingBuilderType = Compilation.GetTypeByMetadataName(candidateBuilderQualifiedName);
             // FIXME: debug
             // if (candidateBuilderQualifiedName != "System.Collections.Generic.Builders.IReadOnlyListBuilder" && candidateBuilderQualifiedName != "System.Builders.StringBuilder")
             // {
@@ -203,6 +201,9 @@ internal class BuilderTargetContext
                     _ when ShouldBeMappedToNestedBuilder(elementType, out var elementData) => CreateRefList(elementData),
                     _ => GetOrCreate(mappedType, isBuilder: false)
                 };
+            case { Type: ITypeSymbol { SpecialType: SpecialType.System_String, NullableAnnotation: NullableAnnotation.None or NullableAnnotation.NotAnnotated } stringType }:
+                typeSymbol = stringType.WithNullableAnnotation(NullableAnnotation.Annotated);
+                return GetOrCreate(typeSymbol, isBuilder: false);
             case { Type: ITypeSymbol mappedType }:
                 typeSymbol = mappedType;
                 return GetOrCreate(mappedType, isBuilder: false);

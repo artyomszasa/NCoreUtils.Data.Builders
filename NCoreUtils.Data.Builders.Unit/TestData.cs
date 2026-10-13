@@ -116,6 +116,16 @@ public class TestData
     public int Count { get; }
 
     /// <summary>
+    /// Simple property with explicit initialized
+    /// </summary>
+    public int InitializedCount { get; }
+
+    /// <summary>
+    /// Nested list of nullable strings.
+    /// </summary>
+    public List<List<string?>> ListOfNullableStrings { get; }
+
+    /// <summary>
     /// Initializes new instace of test class
     /// </summary>
     /// <param name="sub"></param>
@@ -124,7 +134,17 @@ public class TestData
     /// <param name="nested"></param>
     /// <param name="manualNested"></param>
     /// <param name="count"></param>
-    public TestData(IReadOnlyList<TestSubdata> sub, IReadOnlyList<string> strings, IReadOnlyList<int> ints, NestedData nested, ManualNestedData manualNested, int count)
+    /// <param name="initializedCount"></param>
+    /// <param name="listOfNullableStrings"></param>
+    public TestData(
+        IReadOnlyList<TestSubdata> sub,
+        IReadOnlyList<string> strings,
+        IReadOnlyList<int> ints,
+        NestedData nested,
+        ManualNestedData manualNested,
+        int count,
+        int initializedCount,
+        List<List<string?>> listOfNullableStrings)
     {
         Sub = sub;
         Strings = strings;
@@ -132,6 +152,8 @@ public class TestData
         Nested = nested;
         ManualNested = manualNested;
         Count = count;
+        InitializedCount = initializedCount;
+        ListOfNullableStrings = listOfNullableStrings;
     }
 }
 
